@@ -48,47 +48,6 @@ Open [http://localhost:3001](http://localhost:3001). Demo accounts:
 These are public **local-demo** credentials. The provided stack binds to localhost
 and is not an internet-facing production deployment.
 
-Try postal code **600021**, select **21 TEBAN GARDENS ROAD**, choose **4 ROOM**,
-enter **89 sqm** and **floor 8**, then calculate. On Analytics, enable URA boundaries
-and MRT stations. Premium users can open `/valuation-report` after a valuation.
-
-## Verify and manage the installation
-
-```bash
-./scripts/local.sh exec -T backend python -u scripts/verify_local_features.py
-./scripts/local.sh exec -T backend python -m pytest -q
-./scripts/local.sh exec -T backend python -m pytest -q -rs /workspace/modelling/tests
-./scripts/local.sh exec -T frontend npx tsc --noEmit --incremental false
-
-# Stop while preserving database and storage volumes.
-./scripts/local.sh down
-
-# Start again and inspect logs.
-./scripts/local.sh up -d --wait
-./scripts/local.sh logs --tail 100 backend frontend
-```
-
-Verified on 27 October 2026: **146 backend tests passed**, **121 modelling tests
-passed / 1 missing-POI test skipped**, successful TypeScript and production build,
-plus live valuation, SHAP, report, assistant, market-data and map checks. Optional
-credentials should remain blank for the default live verifier. Known lint warnings
-and unfinished workflows are documented in the audit.
-
-## Scope and limitations
-
-- HDB search/valuation and historical charts use public resale/catalogue data.
-- Nearby comparables use actual recorded transactions, with explicit selection criteria.
-- SHAP explains the active local model; reports use actual comparable-sale records.
-- Prediction ranges use separate calibration/test periods. The documented run had
-  a **90% target and 86.6% later test coverage**, which is disclosed rather than guaranteed.
-- URA polygons and MRT locations work. Opening/planned status, POIs and routed
-  travel times need additional data/credentials; grey stations mean status unknown.
-- Local assistant mode queries HDB statistics. Full conversational AI, MAS rates
-  and other external integrations need their respective credentials.
-- Google login, password reset, payments, quota enforcement and automatic pipeline
-  scheduling are unfinished. The marketing-video asset was not supplied.
-- Prefect was part of the original project. The local server does not imply that
-  workers, deployments or schedules have been configured.
 
 ## Repository layout
 
