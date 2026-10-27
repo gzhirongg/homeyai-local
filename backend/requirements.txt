@@ -1,0 +1,41 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+python-multipart
+requests
+pyjwt
+passlib[bcrypt]==1.7.4
+# passlib's bcrypt handler is not compatible with bcrypt>=5 (72-byte behavior changes)
+# and can also trip on bcrypt metadata changes; pin to a known-good version.
+bcrypt==4.0.1
+# SQLAlchemy 2.1 switches bare postgresql:// to psycopg 3; this app uses psycopg2.
+sqlalchemy>=2.0,<2.1
+psycopg2-binary
+weasyprint
+jinja2
+pillow
+python-jose
+pandas
+matplotlib>=3.7
+seaborn>=0.13
+geopandas>=0.14
+shapely>=2.0
+minio
+pyarrow
+alembic
+httpx
+openai
+GeoAlchemy2
+prefect>=3.0.0
+modal>=0.64
+# Pickled pipelines from training must unpickle here — sklearn>=1.7 breaks pickles from <=1.6.x
+# (_RemainderColsList removed). Pin upper bound until models are re-exported on newer sklearn.
+scikit-learn>=1.3,<1.7
+xgboost
+lightgbm>=4.0
+category-encoders
+joblib
+shap
+pytest>=8.0
+PyYAML>=6.0

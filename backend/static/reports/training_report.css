@@ -1,0 +1,103 @@
+/* Experiment training report — PDF-oriented tweaks */
+
+/* WeasyPrint @page supplies page numbers; disable base_report .page::after for this template. */
+.training-page::after {
+    content: none !important;
+}
+
+.training-page .data-table .value-cell {
+    text-align: left;
+}
+
+.training-page .plot-wrap {
+    margin-top: 12px;
+    text-align: center;
+}
+
+.training-page .plot-wrap img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.training-page .plot-caption {
+    font-size: 10px;
+    color: #64748b;
+    margin-top: 8px;
+    white-space: pre-wrap;
+    text-align: left;
+}
+
+.training-page .prose-block {
+    font-size: 10px;
+    color: #2d3748;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-top: 8px;
+}
+
+.training-page .cover-lead {
+    font-size: 11px;
+    color: #475569;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.training-page .cover-hyperparams {
+    margin-top: 16px;
+    text-align: left;
+}
+
+.training-page .cover-hyperparams-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 6px;
+}
+
+.training-page .json-block {
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    font-size: 8px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.training-page .section2-note {
+    font-size: 9px;
+    color: #64748b;
+    margin-bottom: 10px;
+}
+
+.training-page .section2-summary-list {
+    font-size: 10px;
+    line-height: 1.55;
+    color: #2d3748;
+    margin-left: 1.1em;
+}
+
+.training-page .subsection-heading {
+    font-size: 11px;
+    font-weight: 600;
+    color: #334155;
+    margin: 14px 0 8px;
+}
+
+.training-page .pillar-cat-list,
+.training-page .pillar-outcome-list {
+    font-size: 9px;
+    line-height: 1.5;
+    color: #475569;
+    margin-left: 1.1em;
+}
+
+.training-page .mono {
+    font-family: ui-monospace, monospace;
+    font-size: 8.5px;
+}

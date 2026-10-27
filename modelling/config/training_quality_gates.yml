@@ -1,0 +1,54 @@
+# Training data quality gates
+# ─────────────────────────────────────────────────────────────────────────────
+# Edit thresholds here to tighten or relax checks per environment.
+# Override the whole file:   HOMEYAI_DQ_CONFIG=/path/to/custom.yml
+# Override a single value:   HOMEYAI_DQ_MRT__SNAPSHOT_HIT_RATE_MIN=0.80
+#   (format: HOMEYAI_DQ_<SECTION>__<KEY>=<value>, double-underscore separator)
+# ─────────────────────────────────────────────────────────────────────────────
+
+base:
+  enabled: true
+  min_rows: 5000
+  target_null_rate_max: 0.01
+  coord_null_rate_max: 0.05
+  allow_nat_months: false
+
+mrt:
+  enabled: true
+  snapshot_hit_rate_min: 0.85
+  scalar_nullity_agreement_rate_min: 0.99
+  line_connectivity_min_value: 1
+  require_future_upside_variance: true
+  speculative_score_max: 1.0
+  speculative_score_min: 0.0
+  check_project_completion_fraction_when_future_upside: true
+
+macro:
+  enabled: true
+  interest_rate_min_nunique: 5
+  volume_lagged_notna_rate_min: 0.90
+  allow_all_zero_columns: false
+
+poi:
+  enabled: true
+  school_dist_notna_rate_min: 0.95
+  mall_dist_notna_rate_min: 0.95
+  distances_must_be_positive: true
+  require_gravity_variance: true
+
+poi_amenity_v2:
+  enabled: true
+  hawker_dist_notna_rate_min: 0.95
+  mall_count_1_5km_notna_rate_min: 0.95
+
+masterplan:
+  enabled: true
+  nonzero_gpr_rate_min: 0.40
+  nonzero_area_row_rate_min: 0.50
+  dist_cbd_notna_rate_min: 0.95
+  hub_score_finite_rate_min: 0.95
+
+post_split:
+  enabled: true
+  min_test_rows: 500
+  min_train_rows: 2000

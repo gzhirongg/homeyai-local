@@ -1,0 +1,16 @@
+# Local run artefacts (canonical store is MinIO)
+experiments/*
+!experiments/README.md
+!experiments/.gitignore
+
+# Generated reports and aggregates (regenerate via runners)
+outputs/*
+!outputs/.gitkeep
+
+# Notebook / reference clones (not part of the package)
+references/
+
+# Tooling
+.pytest_cache/
+.DS_Store
+*.pyc

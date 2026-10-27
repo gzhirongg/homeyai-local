@@ -1,0 +1,81 @@
+# Prefect 3 deployment for HDB → MRT OneMap routing.
+# Apply from backend/ working directory after a worker pool exists:
+#   cd backend && prefect deploy --all --prefect-file prefect.yaml
+#
+# Flow name matches @flow(name="hdb-mrt-routing") in scripts/engineer_mrt_routing.py.
+# Requires env on the executing agent/process: DATABASE_URL, ONEMAP_*, optional PREFECT_API_URL.
+
+name: homeyai-mrt-enrichment
+prefect-version: ">=3.0,<4"
+
+deployments:
+  - name: mrt-routing-default
+    description: Routes resale-linked enrichment addresses to line-diverse MRT candidates (walk/pt via OneMap).
+    tags: []
+    entrypoint: scripts/engineer_mrt_routing.py:mrt_routing_flow
+    work_pool:
+      name: default-agent-pool
+    parameters:
+      rerun_partial: false
+      limit: 5000
+  - name: mrt-routing-global-refresh
+    description: Global set-diff refresh of hdb_mrt_routes for all enrichment coords (minimal recompute).
+    tags: []
+    entrypoint: scripts/engineer_mrt_routing.py:mrt_routing_global_refresh_flow
+    work_pool:
+      name: default-agent-pool
+    parameters:
+      limit: 5000
+      only_hdb_addr_id: null
+  - name: pit-snapshot-default
+    description: Backfills hdb_mrt_features_pit_snapshot per month using mrt_pit_build_jobs (workers, FOR UPDATE SKIP LOCKED).
+    tags: []
+    entrypoint: scripts/build_mrt_pit_snapshot.py:build_pit_snapshot_flow
+    work_pool:
+      name: default-agent-pool
+    parameters:
+      workers: 6
+      max_months: 0
+      retry_errors: false
+      export_parquet: false
+  - name: model-train-default
+    description: >-
+      Builds or reuses a narrow Parquet per feature_set_id under datasets/training_datasets/v2 (dynamic Postgres
+      queries + manifest/content-aware cache invalidation). Legacy timestamps dataset_version=YYYYMMDDTHHMMSSZ
+      still load training_snapshots/ when pinned. Modal receives Parquet bytes from the worker when under gRPC size limits.
+    tags: []
+    entrypoint: prefect/flows/model_train_flow.py:model_train_flow
+    pull_steps:
+      - prefect.deployments.steps.set_working_directory:
+          directory: /workspace/backend
+    work_pool:
+      name: default-agent-pool
+    parameters:
+      experiment_id: linear__baseline
+      feature_set_id: baseline_v1
+      # null = dynamic build or reuse cached v2 key under SNAPSHOT_MAX_AGE_HOURS.
+      # Pin legacy snapshot "20260517T033055Z" or an existing v2 hex folder name.
+      dataset_version: null
+      use_gpu: null
+      # advisory_only | apply — overrides HOMEYAI_FEATURE_SELECTION_POLICY for this run (null = env default).
+      feature_selection_policy: null
+  - name: model-train-batch-default
+    description: >-
+      One dynamic dataset per distinct feature_set_id (or shared legacy/v2 pin), parquet prefetch once per dataset,
+      then concurrent Modal or inline runs in waves of max_concurrent Prefect tasks. Failures are isolated;
+      failed_experiment_ids in the flow result can be retried via experiment_ids.
+    tags: []
+    entrypoint: prefect/flows/model_train_batch_flow.py:model_train_batch_flow
+    pull_steps:
+      - prefect.deployments.steps.set_working_directory:
+          directory: /workspace/backend
+    work_pool:
+      name: default-agent-pool
+    parameters:
+      experiment_ids: null
+      # null = dynamic build per distinct feature_set_id in the batch (recommended).
+      dataset_version: null
+      use_gpu: false
+      max_concurrent: 5
+      # advisory_only | apply — per-batch policy without rotating Modal secrets (null = env default).
+      feature_selection_policy: null

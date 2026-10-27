@@ -1,0 +1,284 @@
+services:
+  # ==========================================================================
+  # PRODUCTION DATABASE: PostgreSQL with PostGIS
+  # ==========================================================================
+  db:
+    image: kartoza/postgis:15-3.3
+    container_name: sg_real_estate_db
+    # Default 64MiB container /dev/shm is too small for large read_sql / sorts (Postgres ENOSPC on shm).
+    shm_size: "512m"
+    restart: always
+    environment:
+      POSTGRES_USER: ${ADMIN_DB_USER}
+      POSTGRES_PASSWORD: ${ADMIN_DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-real_estate_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Use TCP so pg_isready does not hit Unix-socket "peer" auth (root vs admin).
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${ADMIN_DB_USER:-admin} -d ${DB_NAME:-real_estate_db}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # DEVELOPMENT DATABASE: Isolated PostGIS for dev/testing (port 5433)
+  # ==========================================================================
+  db-dev:
+    image: kartoza/postgis:15-3.3
+    container_name: sg_real_estate_db_dev
+    shm_size: "512m"
+    restart: always
+    environment:
+      POSTGRES_USER: ${ADMIN_DB_USER}
+      POSTGRES_PASSWORD: ${ADMIN_DB_PASSWORD}
+      POSTGRES_DB: real_estate_dev_db
+    ports:
+      - "5433:5432"
+    volumes:
+      # - postgres_data_dev:/var/lib/postgresql/15/main
+      - /mnt/data/docker/volumes/csit321-fyp-predictinghomeprices_postgres_data_dev/_data/15/main:/var/lib/postgresql/15/main
+      # - /mnt/data/backup/csit321-fyp-predictinghomeprices_postgres_data_dev/_data/15/main:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${ADMIN_DB_USER:-admin} -d real_estate_dev_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # MINIO: Centralised object storage (datasets + ML models)
+  # ==========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: sg_real_estate_minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-password123}
+    ports:
+      - "${DB_PORT_MINIO:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: sg_real_estate_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c " echo 'Waiting for MinIO to start...' && sleep 5 && mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-admin} ${MINIO_ROOT_PASSWORD:-password123} && mc mb myminio/datasets --ignore-existing && mc mb myminio/models --ignore-existing && echo 'MinIO bucket initialization complete.' "
+
+  # ==========================================================================
+  # PREFECT: Workflow orchestration — Production (port 4200)
+  # ==========================================================================
+  prefect-server:
+    image: prefecthq/prefect:3-python3.11
+    container_name: prefect_server
+    restart: always
+    command: prefect server start --host 0.0.0.0
+    ports:
+      - "4200:4200"
+    environment:
+      - PREFECT_UI_API_URL=/api
+      - PREFECT_API_URL=http://127.0.0.1:4200/api
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+    volumes:
+      - prefect_data:/root/.prefect
+
+  # ==========================================================================
+  # PREFECT DEV: Workflow orchestration — Development (port 4201)
+  # ==========================================================================
+  prefect-server-dev:
+    image: prefecthq/prefect:3-python3.11
+    container_name: prefect_server_dev
+    restart: always
+    command: prefect server start --host 0.0.0.0 --port 4200
+    ports:
+      - "4201:4200"
+    environment:
+      - PREFECT_UI_API_URL=/api
+      - PREFECT_API_URL=http://127.0.0.1:4200/api
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+    volumes:
+      - prefect_data_dev:/root/.prefect
+
+  # ==========================================================================
+  # PREFECT WORKER: polls default-agent-pool (training + snapshots + MRT flows)
+  # ==========================================================================
+  prefect-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prefect-worker
+    container_name: prefect_worker
+    restart: unless-stopped
+    depends_on:
+      prefect-server:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    working_dir: /workspace/backend
+    command: prefect worker start --pool default-agent-pool
+    env_file:
+      - .env
+    # ML read-only Postgres and Modal tokens (MODAL_TOKEN_*) load from ``.env`` via ``env_file`` — do not inject empty defaults here.
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      MINIO_ENDPOINT: ${MINIO_HOST:-minio}:${MINIO_INNER_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      MINIO_SECURE: "false"
+      DB_HOST: ${DB_HOST:-db}
+      DB_INNER_PORT: ${DB_INNER_PORT:-5432}
+      DB_NAME: ${DB_NAME:-real_estate_db}
+      REMOTE_VM_IP: ${REMOTE_VM_IP:-}
+      MODEL_ENV: ${MODEL_ENV:-prod}
+      MRT_PIT_MIN_YEARS: ${MRT_PIT_MIN_YEARS:-5}
+      MODAL_ENABLED: ${MODAL_ENABLED:-true}
+      SNAPSHOT_MAX_AGE_HOURS: ${SNAPSHOT_MAX_AGE_HOURS:-24}
+      PREFECT_TRAINING_USE_GPU_DEFAULT: ${PREFECT_TRAINING_USE_GPU_DEFAULT:-false}
+      TRAINING_SNAPSHOT_MIN_ROWS: ${TRAINING_SNAPSHOT_MIN_ROWS:-10000}
+    volumes:
+      - .:/workspace
+      - ./data:/workspace/data:ro
+
+  # ==========================================================================
+  # PREFECT WORKER (DEV): polls default-agent-pool on prefect-server-dev (4201)
+  # Required for docker-compose.dev.yml / PREFECT_API_URL …:4201 flow runs.
+  # ==========================================================================
+  prefect-worker-dev:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prefect-worker
+    container_name: prefect_worker_dev
+    restart: unless-stopped
+    depends_on:
+      prefect-server-dev:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      db-dev:
+        condition: service_healthy
+    working_dir: /workspace/backend
+    command: prefect worker start --pool default-agent-pool
+    env_file:
+      - .env
+    # Snapshot export needs ML read-only Postgres vars in repo-root ``.env`` (DATABASE_URL_READ_ONLY or READ_ONLY_DB_* + DB_*; see .env.example).
+    # Default DB_HOST is db-dev. TRAINING_REPLACE_LOOPBACK_PG_HOST maps loopback URLs inside DATABASE_URL_READ_ONLY to Docker DB_HOST/DB_INNER_PORT.
+    environment:
+      PREFECT_API_URL: http://prefect-server-dev:4200/api
+      MINIO_ENDPOINT: ${MINIO_HOST:-minio}:${MINIO_INNER_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      MINIO_SECURE: "false"
+      DB_HOST: ${DB_HOST:-db-dev}
+      DB_INNER_PORT: ${DB_INNER_PORT:-5432}
+      DB_NAME: ${DB_NAME:-real_estate_dev_db}
+      REMOTE_VM_IP: ${REMOTE_VM_IP:-}
+      MODEL_ENV: ${MODEL_ENV:-dev}
+      TRAINING_REPLACE_LOOPBACK_PG_HOST: ${TRAINING_REPLACE_LOOPBACK_PG_HOST:-true}
+      MRT_PIT_MIN_YEARS: ${MRT_PIT_MIN_YEARS:-5}
+      MODAL_ENABLED: ${MODAL_ENABLED:-true}
+      SNAPSHOT_MAX_AGE_HOURS: ${SNAPSHOT_MAX_AGE_HOURS:-24}
+      PREFECT_TRAINING_USE_GPU_DEFAULT: ${PREFECT_TRAINING_USE_GPU_DEFAULT:-false}
+      TRAINING_SNAPSHOT_MIN_ROWS: ${TRAINING_SNAPSHOT_MIN_ROWS:-10000}
+    volumes:
+      - .:/workspace
+      - ./data:/workspace/data:ro
+
+  # ==========================================================================
+  # BACKEND: FastAPI API server
+  # ==========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fastapi_backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    # API is reached via Next.js /api proxy on the Docker network, not exposed publicly.
+    environment:
+      - DATABASE_URL_ADMIN=${DATABASE_URL_ADMIN:-}
+      - DATABASE_URL_READ_ONLY=${DATABASE_URL_READ_ONLY:-}
+      - DATABASE_URL=postgresql://${ADMIN_DB_USER}:${ADMIN_DB_PASSWORD}@${DB_HOST}:${DB_INNER_PORT}/${DB_NAME}
+      - REMOTE_VM_IP=${REMOTE_VM_IP:-}
+      - HOMEYAI_MODELLING_DIR=/modelling
+      - CORS_EXTRA_ORIGINS=${CORS_EXTRA_ORIGINS:-}
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - URA_API_KEY=${URA_API_KEY}
+      - MINIO_ENDPOINT=${MINIO_HOST:-minio}:${MINIO_INNER_PORT:-9000}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-admin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-password123}
+      - MODEL_ENV=${MODEL_ENV:-prod}
+      - APP_VERSION=${APP_VERSION:-dev}
+      - GIT_COMMIT=${GIT_COMMIT:-unknown}
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+      # Optional modelling/outputs (QA reports, SHAP) via HOMEYAI_MODELLING_DIR; experiment data is in MinIO.
+      - ./modelling:/modelling:ro
+      - ./data:/app/data:ro
+
+  # ==========================================================================
+  # FRONTEND: Next.js web application
+  # ==========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Empty = browser uses same-origin /api (proxied to backend inside Docker).
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-}
+        - NEXT_PUBLIC_REMOTE_VM_IP=${REMOTE_VM_IP:-}
+        - BACKEND_INTERNAL_ORIGIN=http://backend:8000
+    container_name: nextjs_frontend
+    restart: always
+    depends_on:
+      - backend
+    # Web UI is reached via Caddy on :443, not exposed directly on :3000.
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-}
+      - NEXT_PUBLIC_REMOTE_VM_IP=${REMOTE_VM_IP:-}
+      - BACKEND_INTERNAL_ORIGIN=http://backend:8000
+
+  # ==========================================================================
+  # CADDY: HTTPS reverse proxy (public entry point)
+  # ==========================================================================
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy_proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - PUBLIC_DOMAIN=${PUBLIC_DOMAIN:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
+volumes:
+  postgres_data:
+  postgres_data_dev:
+  prefect_data:
+  prefect_data_dev:
+  minio_data:
+  caddy_data:
+  caddy_config:

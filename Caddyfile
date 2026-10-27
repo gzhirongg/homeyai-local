@@ -1,0 +1,5 @@
+# Public HTTPS entry point. Set PUBLIC_DOMAIN in .env (e.g. homeyai.freeddns.org).
+# Caddy auto-provisions and renews Let's Encrypt certificates.
+{$PUBLIC_DOMAIN} {
+	reverse_proxy frontend:3000
+}

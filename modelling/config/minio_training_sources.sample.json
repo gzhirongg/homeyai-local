@@ -1,0 +1,13 @@
+{
+  "default_bucket": "datasets",
+  "objects": {
+    "training_hdb_resale_parquet": "modelling/training_sidecars/hdb_resale_training.parquet",
+    "mrt_features_parquet": "modelling/training_sidecars/hdb_mrt_features.parquet",
+    "masterplan_landuse_pit_parquet": "modelling/training_sidecars/hdb_masterplan_landuse_pit.parquet",
+    "global_volume_monthly": "modelling/macro/global_volume_monthly.parquet",
+    "macro_rpi_csv": "modelling/macro/hdb_rpi.csv",
+    "macro_interest_csv": "modelling/macro/interest_rates_monthly.csv",
+    "pois_prefix": "modelling/pois/"
+  },
+  "training_snapshots_prefix": "training_snapshots"
+}

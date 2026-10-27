@@ -1,0 +1,82 @@
+# ==========================================================================
+# LOCAL DEVELOPMENT STACK
+# ==========================================================================
+# Use this for daily development on your machine.
+# Only starts frontend + backend — databases, MinIO, and Prefect
+# run on the VM and are accessed via Tailscale.
+#
+# Usage:  docker compose -f docker-compose.dev.yml up --build
+#
+# One-off commands in the same backend env (remote DB + MinIO): ./scripts/docker_dev_backend.sh …
+#
+# Remote DB must be reachable (Tailscale + VM Postgres). Verify with:
+#   ./scripts/check_remote_db.sh
+# ==========================================================================
+
+volumes:
+  frontend_dev_node_modules:
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fastapi_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL_ADMIN=${DATABASE_URL_ADMIN:-}
+      - DATABASE_URL_READ_ONLY=${DATABASE_URL_READ_ONLY:-}
+      - DATABASE_URL=postgresql://${ADMIN_DB_USER:-admin}:${ADMIN_DB_PASSWORD:-password123}@${DB_HOST}:${DB_INNER_PORT}/${DB_NAME}
+      - REMOTE_VM_IP=${REMOTE_VM_IP:-}
+      - HOMEYAI_MODELLING_DIR=/modelling
+      - CORS_EXTRA_ORIGINS=${CORS_EXTRA_ORIGINS:-}
+      - PREFECT_API_URL=${PREFECT_API_URL:-http://${REMOTE_VM_IP}:4201/api}
+      - URA_API_KEY=${URA_API_KEY}
+      - MAS_API_KEY=${MAS_API_KEY}
+      # Prefer explicit MINIO_ENDPOINT in .env (remote VM host:port); else MINIO_HOST:MINIO_INNER_PORT
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-${MINIO_HOST}:${MINIO_INNER_PORT}}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-admin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-password123}
+      - MODEL_ENV=${MODEL_ENV:-dev}
+      - APP_VERSION=${APP_VERSION:-dev}
+      - GIT_COMMIT=${GIT_COMMIT:-unknown}
+      - ONEMAP_EMAIL_1=${ONEMAP_EMAIL_1:-}
+      - ONEMAP_PASSWORD_1=${ONEMAP_PASSWORD_1:-}
+      - ONEMAP_EMAIL_2=${ONEMAP_EMAIL_2:-}
+      - ONEMAP_PASSWORD_2=${ONEMAP_PASSWORD_2:-}
+      - ONEMAP_EMAIL_3=${ONEMAP_EMAIL_3:-}
+      - ONEMAP_PASSWORD_3=${ONEMAP_PASSWORD_3:-}
+      - ONEMAP_EMAIL_4=${ONEMAP_EMAIL_4:-}
+      - ONEMAP_PASSWORD_4=${ONEMAP_PASSWORD_4:-}
+      - ONEMAP_EMAIL_5=${ONEMAP_EMAIL_5:-}
+      - ONEMAP_PASSWORD_5=${ONEMAP_PASSWORD_5:-}
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+      - ./modelling:/modelling
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: nextjs_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      # Next server proxies `/api/*` → FastAPI (`apiBase.ts` defaults to '' so the browser stays same-origin).
+      - BACKEND_INTERNAL_ORIGIN=http://backend:8000
+      # Optional: set non-empty only if you need the browser to call the API host directly instead of rewriting.
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-}
+      # Mirrors REMOTE_VM_IP for admin health UI (Tailscale VM IP); set REMOTE_VM_IP in .env
+      - NEXT_PUBLIC_REMOTE_VM_IP=${REMOTE_VM_IP:-}
+      # Required for hot-reload on macOS — Docker doesn't forward inotify events reliably
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/app
+      # Preserve the container's node_modules; don't let the host override it
+      - /app/node_modules

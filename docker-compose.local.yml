@@ -1,0 +1,121 @@
+name: homeyai-local
+
+services:
+  db:
+    image: kartoza/postgis:15-3.3
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASS: ${LOCAL_DB_PASSWORD:-homeyai_local_password}
+      POSTGRES_DBNAME: homeyai_local
+    volumes:
+      - local_postgres:/var/lib/postgresql
+    shm_size: 512m
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U admin -d homeyai_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: homeyai-local-minio
+    build: ./docker/minio
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: ${LOCAL_MINIO_PASSWORD:-homeyai_local_storage}
+    ports:
+      - "127.0.0.1:${LOCAL_MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${LOCAL_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - local_minio:/data
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:9000/minio/health/live]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    image: homeyai-local-backend
+    build: ./backend
+    working_dir: /workspace/backend
+    command: sh -c 'python scripts/init_local_storage.py && python -m alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload'
+    environment:
+      DATABASE_URL: postgresql+psycopg2://admin:${LOCAL_DB_PASSWORD:-homeyai_local_password}@db:5432/homeyai_local
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: ${LOCAL_MINIO_PASSWORD:-homeyai_local_storage}
+      MODEL_ENV: dev
+      VALUATION_MODEL_OBJECT_KEY: ${VALUATION_MODEL_OBJECT_KEY:-}
+      HOMEYAI_MODELLING_DIR: /workspace/modelling
+      PREFECT_API_URL: http://prefect:4200/api
+      CORS_EXTRA_ORIGINS: http://localhost:${LOCAL_FRONTEND_PORT:-3001}
+      URA_API_KEY: ${URA_API_KEY:-}
+      MAS_API_KEY: ${MAS_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ONEMAP_EMAIL_1: ${ONEMAP_EMAIL_1:-}
+      ONEMAP_PASSWORD_1: ${ONEMAP_PASSWORD_1:-}
+      PYTHONPATH: /workspace:/workspace/backend
+    volumes:
+      - ./backend:/workspace/backend
+      - ./modelling:/workspace/modelling
+      - ./data:/workspace/data
+    ports:
+      - "127.0.0.1:${LOCAL_BACKEND_PORT:-8001}:8000"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5)"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 15s
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      BACKEND_INTERNAL_ORIGIN: http://backend:8000
+      NEXT_PUBLIC_API_URL: ""
+      WATCHPACK_POLLING: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./frontend:/app
+      - local_node_modules:/app/node_modules
+      - local_next:/app/.next
+    ports:
+      - "127.0.0.1:${LOCAL_FRONTEND_PORT:-3001}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  prefect:
+    image: homeyai-local-backend
+    command: prefect server start --host 0.0.0.0
+    environment:
+      PREFECT_HOME: /prefect
+      PREFECT_SERVER_ANALYTICS_ENABLED: "false"
+      PREFECT_UI_API_URL: http://localhost:${LOCAL_PREFECT_PORT:-4201}/api
+    ports:
+      - "127.0.0.1:${LOCAL_PREFECT_PORT:-4201}:4200"
+    volumes:
+      - local_prefect:/prefect
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4200/api/health', timeout=5)"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  local_postgres:
+  local_minio:
+  local_node_modules:
+  local_next:
+  local_prefect:

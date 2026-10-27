@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Experiment Training Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        {{ styles | safe }}
+    </style>
+</head>
+<body>
+{% for page in pages %}
+    <div class="page training-page">
+        {% if page.kind == "cover" %}
+            <div class="header-section">
+                <div class="logo-container">
+                    {% if logo_data_uri %}
+                    <img src="{{ logo_data_uri }}" alt="HomeyAI Logo" class="logo-image" />
+                    {% endif %}
+                </div>
+                <h1 class="report-title">{{ page.title }}</h1>
+                <p class="report-subtitle">{{ page.subtitle }}</p>
+                <div class="separator"></div>
+            </div>
+            <p class="cover-lead">{{ page.lead }}</p>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th class="header-cell" style="width:38%">Field</th>
+                        <th class="header-cell">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in page.rows %}
+                    <tr>
+                        <td class="label-cell">{{ row.label }}</td>
+                        <td class="value-cell mono">{{ row.value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if page.best_params_json %}
+            <div class="cover-hyperparams">
+                <p class="cover-hyperparams-title">Best hyperparameters (JSON)</p>
+                <pre class="json-block">{{ page.best_params_json }}</pre>
+            </div>
+            {% endif %}
+        {% elif page.kind == "training_matrix_audit" %}
+            <div class="section">
+                <h2 class="section-heading">{{ page.heading }}</h2>
+                {% if page.policy_badge %}
+                <p class="body-text policy-callout"><strong>Recorded policy:</strong> {{ page.policy_badge }}</p>
+                {% endif %}
+                <p class="body-text">{{ page.policy }}</p>
+                <p class="body-text" style="font-size: 0.92em; color: #475569;">{{ page.sample_note }}</p>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="header-cell" style="width:38%">Stage</th>
+                            <th class="header-cell">Summary</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in page.rows %}
+                        <tr>
+                            <td class="label-cell">{{ row.label }}</td>
+                            <td class="value-cell">{{ row.value }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if page.flag_counts and page.flag_counts|length > 0 %}
+                <h3 class="subsection-heading">Diagnostic flags (how many columns per tag)</h3>
+                <p class="body-text" style="font-size: 0.9em;">Full per-column outcomes appear under Section 2 pillar tables. JSON artefacts retain machine-readable detail.</p>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="header-cell">Flag</th>
+                            <th class="header-cell">Columns</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in page.flag_counts %}
+                        <tr>
+                            <td class="label-cell mono">{{ r.flag }}</td>
+                            <td class="value-cell">{{ r.n_features }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
+                {% if page.registry_warnings and page.registry_warnings|length > 0 %}
+                <h3 class="subsection-heading">Registry vs engineered sanity</h3>
+                <ul class="pillar-outcome-list">
+                    {% for w in page.registry_warnings %}
+                    <li class="mono">{{ w }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {% if page.pack_summary_rows and page.pack_summary_rows|length > 0 %}
+                <h3 class="subsection-heading">Feature pack inventory summary</h3>
+                <p class="body-text" style="font-size: 0.9em;">Counts from registered FeatureSet columns grouped by pack (pillar). Flagged counts are advisory-only diagnostics when policy is advisory or drops did not apply.</p>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="header-cell">Pack</th>
+                            <th class="header-cell">Registered</th>
+                            <th class="header-cell">Retained</th>
+                            <th class="header-cell">Dropped (pipeline)</th>
+                            <th class="header-cell">Flagged (advisory)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in page.pack_summary_rows %}
+                        <tr>
+                            <td class="label-cell">{{ r.pack }}</td>
+                            <td class="value-cell">{{ r.registered }}</td>
+                            <td class="value-cell">{{ r.retained }}</td>
+                            <td class="value-cell">{{ r.dropped }}</td>
+                            <td class="value-cell">{{ r.flagged_advisory }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
+                <h3 class="subsection-heading">Feature-selection diagnostics (plots)</h3>
+                {% if page.selection_pngs_all_missing %}
+                <p class="body-text plot-caption">
+                    No feature-selection diagnostic PNGs were embedded. Training may have skipped pre-fit plotting, artefacts were
+                    never uploaded to object storage, or diagnostics produced nothing plottable (e.g.&nbsp;empty numeric diagnostics,
+                    no high-correlation pairs). Check training logs for
+                    <span class="mono">prefit_feature_selection_skipped</span> vs
+                    <span class="mono">prefit_feature_selection_done</span> and for
+                    <span class="mono">feature_selection plot PNGs skipped</span>; confirm
+                    <span class="mono">feature_variance.json</span>,
+                    <span class="mono">feature_mi_scores.json</span>,
+                    <span class="mono">correlated_pairs.json</span>, and
+                    <span class="mono">plots/feature_selection_*.png</span> under the experiment prefix. Ask the API to regenerate
+                    the report with POST <span class="mono">/api/admin/ml/experiment-report</span> and
+                    <span class="mono">use_existing_pdf: false</span> once those objects exist.
+                </p>
+                {% endif %}
+                {% if page.uri_variance %}
+                <div class="plot-wrap">
+                    <img src="{{ page.uri_variance }}" alt="Variance diagnostic" />
+                    <p class="plot-caption">Variance — lowest values; red = flagged below threshold.</p>
+                </div>
+                {% endif %}
+                {% if page.uri_mi %}
+                <div class="plot-wrap">
+                    <img src="{{ page.uri_mi }}" alt="Mutual information diagnostic" />
+                    <p class="plot-caption">Mutual information vs log1p(price); red = below MI floor.</p>
+                </div>
+                {% endif %}
+                {% if page.uri_corr %}
+                <div class="plot-wrap">
+                    <img src="{{ page.uri_corr }}" alt="Correlation pairs" />
+                    <p class="plot-caption">Strongest absolute Pearson correlations among numeric features (preprocessor inputs).</p>
+                </div>
+                {% endif %}
+            </div>
+        {% elif page.kind == "section2_summary" %}
+            <div class="section">
+                <h2 class="section-heading">{{ page.heading }}</h2>
+                {% if page.note %}<p class="body-text section2-note">{{ page.note }}</p>{% endif %}
+                <ul class="section2-summary-list">
+                    {% for line in page.lines %}
+                    <li>{{ line }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% elif page.kind == "feature_pillar" %}
+            <div class="section">
+                <h2 class="section-heading">{{ page.heading }}</h2>
+                {% if page.null_chart_src %}
+                <div class="plot-wrap">
+                    <img src="{{ page.null_chart_src }}" alt="Null rates" />
+                    <p class="plot-caption">Top columns by null rate in this group.</p>
+                </div>
+                {% endif %}
+                {% if page.box_chart_src %}
+                <div class="plot-wrap">
+                    <img src="{{ page.box_chart_src }}" alt="Numeric distributions" />
+                    <p class="plot-caption">Numeric features: horizontal boxes from min, p5–p95, max (mean as median marker).</p>
+                </div>
+                {% endif %}
+                {% if page.categorical_rows and page.categorical_rows|length > 0 %}
+                <h3 class="subsection-heading">Categorical — cardinality &amp; null rate</h3>
+                <ul class="pillar-cat-list">
+                    {% for r in page.categorical_rows %}
+                    <li><span class="mono">{{ r.name }}</span> — nunique={{ r.nunique }}, null_rate={{ r.null_rate }}{% if r.encoding %}, encoding={{ r.encoding }}{% endif %}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {% if page.inventory_rows and page.inventory_rows|length > 0 %}
+                <h3 class="subsection-heading">Registry column inventory</h3>
+                <p class="body-text" style="font-size: 0.9em;">Every registered column in this pack. Prefit selection drops numerics only; categoricals stay in the FeatureSet. Outcomes reflect metrics.json training_matrix_audit and optional diagnostic JSON.</p>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="header-cell">Feature</th>
+                            <th class="header-cell">Kind</th>
+                            <th class="header-cell">Outcome</th>
+                            <th class="header-cell">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in page.inventory_rows %}
+                        <tr>
+                            <td class="label-cell mono">{{ r.feature }}</td>
+                            <td class="value-cell">{{ r.kind }}</td>
+                            <td class="value-cell">{{ r.outcome }}</td>
+                            <td class="value-cell mono" style="font-size:9px;word-break:break-all">{{ r.notes }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% elif page.outcome_rows and page.outcome_rows|length > 0 %}
+                <h3 class="subsection-heading">Diagnostic selection outcome (per column)</h3>
+                <ul class="pillar-outcome-list">
+                    {% for r in page.outcome_rows %}
+                    <li><span class="mono">{{ r.feature }}</span> — {{ r.summary }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+        {% elif page.kind == "table" %}
+            <div class="section">
+                <h2 class="section-heading">{{ page.heading }}</h2>
+                {% if page.caption %}
+                <p class="body-text" style="font-size:10px;color:#475569;margin-bottom:8px">{{ page.caption }}</p>
+                {% endif %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            {% for col in page.columns %}
+                            <th class="header-cell">{{ col.label }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in page.rows %}
+                        <tr>
+                            {% for col in page.columns %}
+                            <td class="value-cell mono" style="word-break:break-all;font-size:9px">{{ row[col.key] }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% elif page.kind == "kv" %}
+            <div class="section">
+                <h2 class="section-heading">{{ page.heading }}</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="header-cell" style="width:38%">Key</th>
+                            <th class="header-cell">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in page.rows %}
+                        <tr>
+                            <td class="label-cell">{{ row.label }}</td>
+                            <td class="value-cell mono">{{ row.value }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% elif page.kind == "plot" %}
+            <div class="section">
+                <h2 class="section-heading">{{ page.heading }}</h2>
+                {% if page.src %}
+                <div class="plot-wrap">
+                    <img src="{{ page.src }}" alt="{{ page.heading }}" />
+                    {% if page.caption %}<p class="plot-caption">{{ page.caption }}</p>{% endif %}
+                </div>
+                {% else %}
+                <p class="body-text" style="font-style:italic;color:#64748b;">{{ page.absent_note or "Plot file was not available." }}</p>
+                {% if page.caption %}<p class="plot-caption">{{ page.caption }}</p>{% endif %}
+                {% endif %}
+            </div>
+        {% elif page.kind == "prose" %}
+            <div class="section">
+                <h2 class="section-heading">{{ page.heading }}</h2>
+                <div class="prose-block">{{ page.body }}</div>
+            </div>
+        {% elif page.kind == "disclaimer" %}
+            <div class="header-section">
+                <h2 class="section-heading">IMPORTANT DISCLAIMER</h2>
+            </div>
+            <div class="section disclaimer-section">
+                {% for row in page.rows %}
+                <p class="disclaimer-text">{{ row.value }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if loop.last %}
+        <div class="footer" style="margin-top: 24px; padding-top: 12px; border-top: 1px solid #e2e8f0; text-align: center;">
+            <p class="footer-text">
+                Copyright {{ year }} HomeyAI. All rights reserved. | Offline training diagnostics — not investment advice.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+{% endfor %}
+</body>
+</html>

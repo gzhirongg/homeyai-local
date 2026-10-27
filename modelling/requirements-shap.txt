@@ -1,0 +1,2 @@
+# Optional SHAP reporting (see modelling/report_mrt_shap.py)
+shap>=0.44

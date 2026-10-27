@@ -1,0 +1,41 @@
+# Credentials and local configuration (publish templates only).
+.env
+.env.*
+!.env.example
+!.env.local.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.local.example
+*.pem
+*.key
+**/.onemap_token*.json
+
+# Installed dependencies and machine-generated caches.
+.venv/
+**/.venv/
+venv/
+**/node_modules/
+**/.next/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.tsbuildinfo
+.DS_Store
+*.log
+*.sqlite
+*.sqlite3
+
+# Regenerated datasets, local models and verification outputs.
+/data/*
+!/data/README.md
+*.pkl
+*.joblib
+/output/
+/tmp/
+/modelling/outputs/*
+!/modelling/outputs/.gitkeep
+!/modelling/outputs/mrt_pit_features/
+/modelling/outputs/mrt_pit_features/*
+!/modelling/outputs/mrt_pit_features/README.md

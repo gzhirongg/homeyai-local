@@ -1,0 +1,5 @@
+# Optional: database-backed training (`--from-db` / `DATABASE_URL_READ_ONLY` or `READ_ONLY_DB_*`)
+# pip install -r modelling/requirements-db.txt
+pandas>=2.0
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
